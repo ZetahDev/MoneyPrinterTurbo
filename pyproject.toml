@@ -1,6 +1,3 @@
-# 说明：
-# 1. 主依赖来源统一收敛到 pyproject.toml。
-# 2. 运行环境通过 uv.lock 固定，避免不同机器解析出不同版本组合。
 [build-system]
 requires = ["hatchling>=1.27.0"]
 build-backend = "hatchling.build"
@@ -45,5 +42,4 @@ twelvelabs = [
 packages = ["app"]
 
 [tool.uv]
-# 当前项目以应用运行形态为主，不作为可发布的 Python 包安装。
 package = false

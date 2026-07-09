@@ -817,7 +817,7 @@ with middle_panel:
             (tr("Pixabay"), "pixabay"),
             (tr("Coverr"), "coverr"),
             (tr("Local file"), "local"),
-            (tr("TikTok"), "douyin"),
+            (tr("TikTok Cross-Post"), "douyin"),
             (tr("Bilibili"), "bilibili"),
             (tr("Xiaohongshu"), "xiaohongshu"),
         ]
@@ -835,6 +835,9 @@ with middle_panel:
         )
         params.video_source = video_sources[selected_index][1]
         config.app["video_source"] = params.video_source
+
+        if params.video_source == "douyin":
+            st.info(tr("TikTok Cross-Post Info"))
 
         if params.video_source == "local":
             # Streamlit 的文件类型校验对扩展名大小写敏感，这里同时放行大小写两种形式。
@@ -1006,7 +1009,24 @@ with middle_panel:
                 st.session_state[cache_key] = voice.get_elevenlabs_voices(
                     saved_elevenlabs_api_key
                 )
-            filtered_voices = st.session_state[cache_key]
+            elevenlabs_voice_search = st.text_input(
+                tr("Search Voices"),
+                value=st.session_state.get("elevenlabs_voice_search", ""),
+                key="elevenlabs_voice_search_input",
+                placeholder=tr("Search Voices Placeholder"),
+            ).strip()
+            st.session_state["elevenlabs_voice_search"] = elevenlabs_voice_search
+            all_elevenlabs_voices = st.session_state[cache_key]
+            if elevenlabs_voice_search:
+                needle = elevenlabs_voice_search.lower()
+                filtered_voices = [
+                    v
+                    for v in all_elevenlabs_voices
+                    if needle in v.lower()
+                    or needle in v.split(":", 2)[-1].lower()
+                ]
+            else:
+                filtered_voices = all_elevenlabs_voices
         elif selected_tts_server == "chatterbox":
             # 自托管 Chatterbox 服务的预置音色（来自 [chatterbox] voices 配置）
             _sync_chatterbox_config_from_session_state()
@@ -1245,6 +1265,8 @@ with middle_panel:
                         del st.session_state[k]
 
             config.elevenlabs["api_key"] = elevenlabs_api_key
+
+            st.caption(tr("ElevenLabs Voice Search Help"))
 
         # Chatterbox API settings section (self-hosted, OpenAI-compatible)
         if selected_tts_server == "chatterbox" or (
