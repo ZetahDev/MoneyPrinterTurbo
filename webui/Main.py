@@ -134,6 +134,12 @@ if "custom_system_prompt" not in st.session_state:
     st.session_state["custom_system_prompt"] = llm.DEFAULT_SCRIPT_SYSTEM_PROMPT
 if "use_custom_system_prompt" not in st.session_state:
     st.session_state["use_custom_system_prompt"] = False
+if "force_spanish_content" not in st.session_state:
+    st.session_state["force_spanish_content"] = bool(
+        config.ui.get("force_spanish_content", False)
+    )
+if "spanish_variant" not in st.session_state:
+    st.session_state["spanish_variant"] = config.ui.get("spanish_variant", "latam")
 if "match_materials_to_script" not in st.session_state:
     st.session_state["match_materials_to_script"] = bool(
         config.app.get("match_materials_to_script", False)
@@ -296,6 +302,36 @@ def tr_optional(key):
     loc = locales.get(st.session_state["ui_language"], {})
     value = loc.get("Translation", {}).get(key, "")
     return value if value else ""
+
+
+st.session_state["force_spanish_content"] = st.checkbox(
+    tr("Force Spanish Content"),
+    value=st.session_state.get("force_spanish_content", False)
+    or str(st.session_state.get("ui_language", "")).startswith("es"),
+    help=tr("Force Spanish Content Help"),
+)
+config.ui["force_spanish_content"] = st.session_state["force_spanish_content"]
+
+spanish_variant_options = [
+    "latam",
+    "spain",
+]
+selected_spanish_variant_index = 0
+for idx, value in enumerate(spanish_variant_options):
+    if value == st.session_state.get("spanish_variant", "latam"):
+        selected_spanish_variant_index = idx
+        break
+
+selected_spanish_variant = st.selectbox(
+    tr("Spanish Variant"),
+    options=spanish_variant_options,
+    index=selected_spanish_variant_index,
+    format_func=lambda item: tr("Spanish Variant Latin America")
+    if item == "latam"
+    else tr("Spanish Variant Spain"),
+)
+st.session_state["spanish_variant"] = selected_spanish_variant
+config.ui["spanish_variant"] = st.session_state["spanish_variant"]
 
 
 def get_llm_provider_tips(provider_id, **kwargs):

@@ -17,6 +17,20 @@ MIN_SCRIPT_PARAGRAPH_NUMBER = 1
 MAX_SCRIPT_PARAGRAPH_NUMBER = 10
 MAX_SCRIPT_PROMPT_LENGTH = 2000
 MAX_SCRIPT_SYSTEM_PROMPT_LENGTH = 8000
+def _force_spanish_output() -> bool:
+    ui_language = str(config.ui.get("language", "") or "").strip().lower()
+    if ui_language.startswith("es"):
+        return True
+    return bool(config.ui.get("force_spanish_content", False))
+
+
+def _spanish_variant() -> str:
+    variant = str(config.ui.get("spanish_variant", "latam") or "latam").strip().lower()
+    if variant in {"latam", "latin-america", "latin_america", "latino"}:
+        return "latam"
+    if variant in {"es", "spain", "spain-es", "es-es"}:
+        return "spain"
+    return "latam"
 _THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>", re.IGNORECASE | re.DOTALL)
 _UNCLOSED_THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*$", re.IGNORECASE | re.DOTALL)
 _URL_USERINFO_RE = re.compile(r"((?:https?|wss?)://)([^/\s?#@]*:[^/\s?#@]*@)", re.IGNORECASE)
@@ -40,6 +54,7 @@ Generate a script for a video, depending on the subject of the video.
 6. do not include "voiceover", "narrator" or similar indicators of what should be spoken at the beginning of each paragraph or line.
 7. you must not mention the prompt, or anything about the script itself. also, never talk about the amount of paragraphs or lines. just write the script.
 8. respond in the same language as the video subject.
+9. if the UI language is Spanish, write natural Latin American Spanish unless the user explicitly requests another variant.
 """.strip()
 
 
@@ -628,6 +643,11 @@ def build_script_prompt(
 """.rstrip()
     if language:
         prompt += f"\n- language: {language}"
+    if _force_spanish_output():
+        if _spanish_variant() == "spain":
+            prompt += "\n- Spanish mode: write the script in natural European Spanish."
+        else:
+            prompt += "\n- Spanish mode: write the script in natural Latin American Spanish."
     if video_script_prompt:
         prompt += f"""
 
@@ -789,7 +809,8 @@ def generate_terms(
 ### Video Script
 {video_script}
 
-Please note that you must use English for generating video search terms; Chinese is not accepted.
+    Please note that you must use English for generating video search terms; Chinese is not accepted.
+    If the UI is in Spanish, keep the script and metadata in the selected Spanish variant, but still keep stock-video search terms in English.
 """.strip()
 
     logger.info(
@@ -906,6 +927,16 @@ def _limit_social_text(text: str | None, max_length: int, field_name: str) -> st
 
 def _social_language_instruction(language: str | None) -> str:
     language = _normalize_social_language(language)
+    if _force_spanish_output():
+        if _spanish_variant() == "spain":
+            return (
+                'Write "title" and "caption" in European Spanish. '
+                "Use natural European Spanish unless the user requests another variant."
+            )
+        return (
+            'Write "title" and "caption" in Latin American Spanish. '
+            "Use natural Latin American Spanish unless the user requests another variant."
+        )
     if language.lower() == DEFAULT_SOCIAL_LANGUAGE:
         return (
             "Use the same language as the video subject and script. If the subject "
@@ -984,7 +1015,8 @@ Write engaging publishing metadata for a short video that will be posted on {lab
 3. "title": a catchy hook, at most {spec['title_max']} characters.
 4. "caption": an engaging description that ends with a call to action, at most {spec['caption_max']} characters. Do not put hashtags inside the caption.
 5. "hashtags": a JSON array of exactly {spec['hashtag_count']} strings. Each must start with "#", contain no spaces, and be relevant to the topic and to {label}.
-6. {language_instruction}
+    6. {language_instruction}
+    7. If the UI is in Spanish, keep the title and caption in the selected Spanish variant even when the subject is mixed-language.
 
 ## Output Example
 {{"title":"...","caption":"...","hashtags":["#example","#video"]}}
@@ -1111,4 +1143,3 @@ if __name__ == "__main__":
     )
     print("######################")
     print(search_terms)
-
