@@ -15,14 +15,14 @@ def __init_logger():
     )
 
     def format_record(record):
-        # 获取日志记录中的文件全路径
+        # Obtener la ruta completa del archivo del registro de log
         file_path = record["file"].path
-        # 将绝对路径转换为相对于项目根目录的路径
+        # Convertir la ruta absoluta a una ruta relativa respecto al directorio raiz del proyecto
         relative_path = os.path.relpath(file_path, root_dir)
-        # 更新记录中的文件路径
+        # Actualizar la ruta del archivo en el registro
         record["file"].path = f"./{relative_path}"
-        # 返回修改后的格式字符串
-        # 您可以根据需要调整这里的格式
+        # Devolver la cadena de formato modificada
+        # Se puede ajustar el formato segun las necesidades
         _format = (
             "<green>{time:%Y-%m-%d %H:%M:%S}</> | "
             + "<level>{level}</> | "

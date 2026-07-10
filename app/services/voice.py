@@ -802,10 +802,10 @@ def siliconflow_tts(
         logger.error("SiliconFlow API key is not set")
         return None
 
-    # 将voice_volume转换为硅基流动的增益范围
-    # 默认voice_volume为1.0，对应gain为0
+    # Convertir voice_volume al rango de ganancia de SiliconFlow
+    # El voice_volume predeterminado es 1.0, que corresponde a una ganancia de 0
     gain = voice_volume - 1.0
-    # 确保gain在[-10, 10]范围内
+    # Asegurar que la ganancia este dentro del rango [-10, 10]
     gain = max(-10, min(10, gain))
 
     url = "https://api.siliconflow.cn/v1/audio/speech"
@@ -823,7 +823,7 @@ def siliconflow_tts(
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
-    for i in range(3):  # 尝试3次
+    for i in range(3):  # Intentar 3 veces
         try:
             logger.info(
                 f"start siliconflow tts, model: {model}, voice: {voice}, try: {i + 1}"
@@ -832,31 +832,31 @@ def siliconflow_tts(
             response = requests.post(url, json=payload, headers=headers)
 
             if response.status_code == 200:
-                # 保存音频文件
+                # Guardar el archivo de audio
                 with open(voice_file, "wb") as f:
                     f.write(response.content)
 
-                # 这里仍然沿用项目原有的字幕结构，因此需要补齐旧字段。
+                # Se mantiene la estructura de subtitulos original del proyecto, rellenando los campos heredados.
                 sub_maker = ensure_legacy_submaker_fields(SubMaker())
 
-                # 获取音频文件的实际长度
+                # Obtener la duracion real del archivo de audio
                 try:
-                    # 尝试使用moviepy获取音频长度
+                    # Intentar usar moviepy para obtener la duracion del audio
                     from moviepy import AudioFileClip
 
                     audio_clip = AudioFileClip(voice_file)
                     audio_duration = audio_clip.duration
                     audio_clip.close()
 
-                    # 将音频长度转换为100纳秒单位（与edge_tts兼容）
+                    # Convertir la duracion del audio a unidades de 100 nanosegundos (compatible con edge_tts)
                     audio_duration_100ns = int(audio_duration * 10000000)
 
-                    # 使用文本分割来创建更准确的字幕
-                    # 将文本按标点符号分割成句子
+                    # Usar la segmentacion de texto para crear subtitulos mas precisos
+                    # Dividir el texto en oraciones por signos de puntuacion
                     sentences = utils.split_string_by_punctuations(text)
 
                     if sentences:
-                        # 计算每个句子的大致时长（按字符数比例分配）
+                        # Calcular la duracion aproximada de cada oracion (proporcional al numero de caracteres)
                         total_chars = sum(len(s) for s in sentences)
                         char_duration = (
                             audio_duration_100ns / total_chars if total_chars > 0 else 0
@@ -867,28 +867,28 @@ def siliconflow_tts(
                             if not sentence.strip():
                                 continue
 
-                            # 计算当前句子的时长
+                            # Calcular la duracion de la oracion actual
                             sentence_chars = len(sentence)
                             sentence_duration = int(sentence_chars * char_duration)
 
-                            # 添加到SubMaker
+                            # Agregar al SubMaker
                             sub_maker.subs.append(sentence)
                             sub_maker.offset.append(
                                 (current_offset, current_offset + sentence_duration)
                             )
 
-                            # 更新偏移量
+                            # Actualizar el desplazamiento
                             current_offset += sentence_duration
                     else:
-                        # 如果无法分割，则使用整个文本作为一个字幕
+                        # Si no se puede segmentar, usar el texto completo como un unico subtitulo
                         sub_maker.subs = [text]
                         sub_maker.offset = [(0, audio_duration_100ns)]
 
                 except Exception as e:
                     logger.warning(f"Failed to create accurate subtitles: {str(e)}")
-                    # 回退到简单的字幕
+                    # Volver a subtitulos simples
                     sub_maker.subs = [text]
-                    # 使用音频文件的实际长度，如果无法获取，则假设为10秒
+                    # Usar la duracion real del archivo de audio; si no se puede obtener, asumir 10 segundos
                     sub_maker.offset = [
                         (
                             0,

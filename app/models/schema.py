@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.config import config
 
-# 忽略 Pydantic 的特定警告
+# Ignorar advertencias específicas de Pydantic
 warnings.filterwarnings(
     "ignore",
     category=UserWarning,
@@ -59,10 +59,10 @@ class VideoParams(BaseModel):
     """
     {
       "video_subject": "",
-      "video_aspect": "横屏 16:9（西瓜视频）",
-      "voice_name": "女生-晓晓",
+      "video_aspect": "Horizontal 16:9 (paisaje)",
+      "voice_name": "Femenino-Xiaoxiao",
       "bgm_name": "random",
-      "font_name": "STHeitiMedium 黑体-中",
+      "font_name": "STHeitiMedium Negrita-Media",
       "text_color": "#FFFFFF",
       "font_size": 60,
       "stroke_color": "#000000",
@@ -148,7 +148,7 @@ class AudioRequest(BaseModel):
 class VideoScriptParams:
     """
     {
-      "video_subject": "春天的花海",
+      "video_subject": "El mar de flores en primavera",
       "video_language": "",
       "paragraph_number": 1,
       "video_script_prompt": "",
@@ -156,7 +156,7 @@ class VideoScriptParams:
     }
     """
 
-    video_subject: Optional[str] = "春天的花海"
+    video_subject: Optional[str] = "El mar de flores en primavera"
     video_language: Optional[str] = ""
     paragraph_number: int = Field(default=1, ge=1, le=10)
     video_script_prompt: str = Field(default="", max_length=2000)
@@ -173,9 +173,9 @@ class VideoTermsParams:
     }
     """
 
-    video_subject: Optional[str] = "春天的花海"
+    video_subject: Optional[str] = "El mar de flores en primavera"
     video_script: Optional[str] = (
-        "春天的花海，如诗如画般展现在眼前。万物复苏的季节里，大地披上了一袭绚丽多彩的盛装。金黄的迎春、粉嫩的樱花、洁白的梨花、艳丽的郁金香……"
+        "El mar de flores en primavera se despliega ante los ojos como una pintura poetica. En la estacion en que todo renace, la tierra se viste con un manto colorido y esplendoroso: forsitias doradas, cerezos rosados, perales blancos, tulipanes vibrantes..."
     )
     amount: Optional[int] = 5
     match_materials_to_script: bool = False

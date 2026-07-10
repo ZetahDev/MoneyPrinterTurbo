@@ -104,6 +104,81 @@ def font_dir(sub_dir: str = ""):
     return d
 
 
+def system_font_dirs() -> list[str]:
+    # macOS usually stores user fonts in ~/Library/Fonts and system fonts in
+    # /Library/Fonts or /System/Library/Fonts. Keep the list conservative and
+    # only include common readable locations.
+    home_fonts = os.path.join(Path.home(), "Library", "Fonts")
+    return [
+        home_fonts,
+        "/Library/Fonts",
+        "/System/Library/Fonts",
+    ]
+
+
+def get_available_fonts() -> list[dict]:
+    """
+    Return font candidates from the bundled resource folder and the system fonts.
+
+    Each item has:
+        - label: display label for the UI
+        - path: absolute font path used by PIL/MoviePy
+        - source: resource|system
+    """
+    candidates: list[dict] = []
+    seen = set()
+
+    def add_font(font_path: str, source: str):
+        real = os.path.realpath(font_path)
+        if real in seen:
+            return
+        if not os.path.isfile(real):
+            return
+        seen.add(real)
+        candidates.append(
+            {
+                "label": os.path.basename(real),
+                "path": real,
+                "source": source,
+            }
+        )
+
+    resource_fonts = font_dir()
+    if os.path.isdir(resource_fonts):
+        for entry in sorted(os.listdir(resource_fonts)):
+            if entry.lower().endswith((".ttf", ".ttc", ".otf")):
+                add_font(os.path.join(resource_fonts, entry), "resource")
+
+    for font_root in system_font_dirs():
+        if not os.path.isdir(font_root):
+            continue
+        for root, _, files in os.walk(font_root):
+            for entry in files:
+                if entry.lower().endswith((".ttf", ".ttc", ".otf")):
+                    add_font(os.path.join(root, entry), "system")
+
+    candidates.sort(key=lambda item: (item["label"].lower(), item["path"]))
+    return candidates
+
+
+def resolve_font_path(font_name_or_path: str) -> str:
+    value = (font_name_or_path or "").strip()
+    if not value:
+        return ""
+    if os.path.isabs(value) and os.path.isfile(value):
+        return os.path.realpath(value)
+
+    resource_candidate = os.path.join(font_dir(), value)
+    if os.path.isfile(resource_candidate):
+        return os.path.realpath(resource_candidate)
+
+    for candidate in get_available_fonts():
+        if candidate["label"] == value:
+            return candidate["path"]
+
+    return value
+
+
 def song_dir(sub_dir: str = ""):
     d = resource_dir("songs")
     if sub_dir:
@@ -124,19 +199,22 @@ def public_dir(sub_dir: str = ""):
 
 def get_ffmpeg_binary() -> str:
     """
-    解析当前进程应该使用的 FFmpeg 可执行文件。
+    Resuelve el ejecutable de FFmpeg que debe usar el proceso actual.
 
-    增加原因：
-    1. 视频编码、静音音频生成、pydub 音频转码都依赖 FFmpeg；
-    2. Windows 便携包、Docker 和用户自定义安装目录经常出现 PATH 不一致；
-    3. 集中解析可以让所有调用方使用同一套优先级，减少某条链路能跑、
-       另一条链路找不到 FFmpeg 的现场问题。
+    Motivo de esta función centralizada:
+    1. La codificación de video, la generación de audio silencioso y la transcodificación
+       de audio con pydub dependen de FFmpeg;
+    2. Los paquetes portables de Windows, Docker y los directorios de instalación
+       personalizados frecuentemente causan inconsistencias en el PATH;
+    3. Al centralizar la resolución, todos los llamadores usan la misma prioridad,
+       reduciendo situaciones donde una ruta funciona pero otra no encuentra FFmpeg.
 
-    优先级：
-    1. IMAGEIO_FFMPEG_EXE：MoviePy/imageio 约定的显式配置；
-    2. 系统 PATH 中的 ffmpeg；
-    3. imageio-ffmpeg 依赖提供的内置二进制；
-    4. 字符串 "ffmpeg" 兜底，交给 subprocess 在运行时暴露更具体错误。
+    Orden de prioridad:
+    1. IMAGEIO_FFMPEG_EXE: configuración explícita según la convención de MoviePy/imageio;
+    2. ffmpeg en el PATH del sistema;
+    3. binario integrado provisto por la dependencia imageio-ffmpeg;
+    4. la cadena "ffmpeg" como último recurso, dejando que subprocess exponga un error
+       más específico en tiempo de ejecución.
     """
     configured_ffmpeg = os.environ.get("IMAGEIO_FFMPEG_EXE")
     if configured_ffmpeg:
@@ -225,10 +303,10 @@ def split_string_by_punctuations(s):
             continue
 
         if char == "," and previous_char.isdigit() and next_char.isdigit():
-            # 英文数字里的千分位逗号不是断句符，例如 "1,000 years"。
-            # Edge TTS 的 word boundary 通常会把这种数字整体作为连续内容返回；
-            # 如果这里拆成 "1" 和 "000 years"，后续字幕聚合会无法匹配脚本原文，
-            # 进而错误回退到 Whisper。
+            # La coma como separador de miles en numeros en ingles no es un delimitador de oraciones, p. ej. "1,000 years".
+            # El word boundary de Edge TTS normalmente devuelve ese tipo de numero como contenido continuo;
+            # si se divide en "1" y "000 years", la agregacion de subtitulos no podra coincidir con
+            # el texto original del guion y retrocederia incorrectamente a Whisper.
             txt += char
             continue
 
@@ -245,12 +323,14 @@ def split_string_by_punctuations(s):
 
 def normalize_script_for_subtitle_matching(video_script: str) -> str:
     """
-    清理字幕匹配前的脚本文本。
+    Limpia el texto del guion antes de la coincidencia de subtitulos.
 
-    用户可能手动输入 Markdown 分隔符、标题强调或 `_` 这类格式符号。
-    这些字符通常不会出现在 TTS/Whisper 的识别结果里；如果继续参与
-    字幕逐行匹配，脚本行数量会大于真实字幕行数量，最终可能补出
-    `00:00:00,000 --> 00:00:00,000`，导致剪辑软件无法导入 SRT。
+    El usuario puede ingresar manualmente separadores Markdown, enfasis de encabezado
+    o simbolos de formato como `_`. Estos caracteres normalmente no aparecen en los
+    resultados de TTS/Whisper; si siguen participando en la coincidencia linea a linea,
+    el numero de lineas del guion superara el de las lineas de subtitulos, pudiendo
+    generar entradas `00:00:00,000 --> 00:00:00,000` que impiden importar el SRT
+    en el software de edicion.
     """
     video_script = video_script or ""
     underscore_count = video_script.count("_")
@@ -259,8 +339,9 @@ def normalize_script_for_subtitle_matching(video_script: str) -> str:
     removed_separator_lines = 0
     for line in video_script.splitlines():
         line = line.strip()
-        # Markdown 分隔符或强调符号单独成行时不会被 TTS 朗读，必须从
-        # 脚本行里移除，避免字幕聚合卡在这类“不可发声”的目标行上。
+        # Los separadores o simbolos de enfasis Markdown que aparecen solos en una linea
+        # no son leidos por el TTS y deben eliminarse del guion, para evitar que la
+        # agregacion de subtitulos quede bloqueada en esas lineas "no pronunciables".
         if re.fullmatch(r"[-*_]{3,}", line):
             removed_separator_lines += 1
             continue
@@ -295,8 +376,10 @@ def get_system_locale():
 
 @lru_cache(maxsize=None)
 def load_locales(i18n_dir):
-    # WebUI 每次交互都会触发 Streamlit 重新执行脚本，语言文件运行期不会变化，
-    # 因此缓存解析结果，避免反复读取和解析所有 i18n JSON 文件。
+    # Cada interaccion en el WebUI provoca que Streamlit re-ejecute el script;
+    # los archivos de idioma no cambian en tiempo de ejecucion, por lo que se
+    # almacena en cache el resultado del analisis para evitar releer y parsear
+    # todos los archivos JSON de i18n repetidamente.
     _locales = {}
     for root, dirs, files in os.walk(i18n_dir):
         for file in files:

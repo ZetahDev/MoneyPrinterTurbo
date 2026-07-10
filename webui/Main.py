@@ -200,13 +200,7 @@ support_locales = [
 
 
 def get_all_fonts():
-    fonts = []
-    for root, dirs, files in os.walk(font_dir):
-        for file in files:
-            if file.endswith(".ttf") or file.endswith(".ttc"):
-                fonts.append(file)
-    fonts.sort()
-    return fonts
+    return utils.get_available_fonts()
 
 
 def get_all_songs():
@@ -817,14 +811,16 @@ with middle_panel:
             (tr("Pixabay"), "pixabay"),
             (tr("Coverr"), "coverr"),
             (tr("Local file"), "local"),
-            (tr("TikTok Cross-Post"), "douyin"),
-            (tr("Bilibili"), "bilibili"),
-            (tr("Xiaohongshu"), "xiaohongshu"),
+            (tr("Meta"), "meta"),
+            (tr("YouTube"), "youtube"),
         ]
 
         saved_video_source_name = config.app.get("video_source", "pexels")
-        saved_video_source_index = [v[1] for v in video_sources].index(
-            saved_video_source_name
+        video_source_values = [v[1] for v in video_sources]
+        saved_video_source_index = (
+            video_source_values.index(saved_video_source_name)
+            if saved_video_source_name in video_source_values
+            else 0
         )
 
         selected_index = st.selectbox(
@@ -836,8 +832,10 @@ with middle_panel:
         params.video_source = video_sources[selected_index][1]
         config.app["video_source"] = params.video_source
 
-        if params.video_source == "douyin":
-            st.info(tr("TikTok Cross-Post Info"))
+        if params.video_source == "meta":
+            st.info(tr("Meta Cross-Post Info"))
+        elif params.video_source == "youtube":
+            st.info(tr("YouTube Cross-Post Info"))
 
         if params.video_source == "local":
             # Streamlit 的文件类型校验对扩展名大小写敏感，这里同时放行大小写两种形式。
@@ -1382,15 +1380,26 @@ with right_panel:
     with st.container(border=True):
         st.write(tr("Subtitle Settings"))
         params.subtitle_enabled = st.checkbox(tr("Enable Subtitles"), value=True)
-        font_names = get_all_fonts()
+        font_options = get_all_fonts()
         saved_font_name = config.ui.get("font_name", "MicrosoftYaHeiBold.ttc")
         saved_font_name_index = 0
-        if saved_font_name in font_names:
-            saved_font_name_index = font_names.index(saved_font_name)
-        params.font_name = st.selectbox(
-            tr("Font"), font_names, index=saved_font_name_index
+        saved_font_path = utils.resolve_font_path(saved_font_name)
+        for i, font_item in enumerate(font_options):
+            if font_item["path"] == saved_font_path or font_item["label"] == saved_font_name:
+                saved_font_name_index = i
+                break
+        selected_font_index = st.selectbox(
+            tr("Font"),
+            options=range(len(font_options)),
+            index=saved_font_name_index if font_options else 0,
+            format_func=lambda x: font_options[x]["label"] if font_options else "",
         )
-        config.ui["font_name"] = params.font_name
+        if font_options:
+            params.font_name = font_options[selected_font_index]["path"]
+            config.ui["font_name"] = font_options[selected_font_index]["label"]
+        else:
+            params.font_name = saved_font_name
+            config.ui["font_name"] = saved_font_name
 
         subtitle_positions = [
             (tr("Top"), "top"),
@@ -1603,7 +1612,14 @@ if start_button:
         scroll_to_bottom()
         st.stop()
 
-    if params.video_source not in ["pexels", "pixabay", "coverr", "local"]:
+    if params.video_source not in [
+        "pexels",
+        "pixabay",
+        "coverr",
+        "local",
+        "meta",
+        "youtube",
+    ]:
         st.error(tr("Please Select a Valid Video Source"))
         scroll_to_bottom()
         st.stop()

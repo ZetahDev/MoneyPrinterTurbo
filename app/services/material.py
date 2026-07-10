@@ -18,9 +18,11 @@ _api_key_lock = threading.Lock()
 
 
 def _get_tls_verify() -> bool:
-    # 默认开启 TLS 证书校验，防止素材搜索和下载过程被中间人篡改。
-    # 仅在企业代理、自签证书等明确需要的场景下，允许用户通过
-    # `config.toml` 显式设置 `tls_verify = false` 临时关闭。
+    # La verificación del certificado TLS está habilitada por defecto para prevenir
+    # ataques de intermediario durante la búsqueda y descarga de materiales.
+    # Solo en escenarios donde sea estrictamente necesario (proxies corporativos,
+    # certificados autofirmados, etc.), el usuario puede desactivarla temporalmente
+    # estableciendo `tls_verify = false` en `config.toml`.
     tls_verify = config.app.get("tls_verify", True)
     if isinstance(tls_verify, str):
         tls_verify = tls_verify.strip().lower() not in ("0", "false", "no", "off")
@@ -175,19 +177,19 @@ def search_videos_coverr(
     subject to Coverr license terms (https://coverr.co/license).
 
     Coverr API notes (based on official docs at api.coverr.co/docs/):
-      - 鉴权: Authorization: Bearer <api_key>
-      - 搜索端点: GET /videos?query=...,响应结构 {"hits": [...], ...}
-      - 加 ?urls=true 在搜索响应里直接返回 mp4 直链
-      - URL 是 signed JWT(绑定 API key,无过期时间)
-      - Coverr 库以 16:9 横屏为主,9:16 portrait 占比极低(约 1%)
-        因此本函数不做 aspect_ratio 过滤,由下游 video.py 的
-        resize + letterbox 逻辑统一处理
-      - duration 字段同时存在 number 和 string 两种形态,本函数都接受
+      - Autenticación: Authorization: Bearer <api_key>
+      - Endpoint de búsqueda: GET /videos?query=..., estructura de respuesta {"hits": [...], ...}
+      - Añadir ?urls=true devuelve directamente el enlace mp4 en la respuesta de búsqueda
+      - La URL es un JWT firmado (vinculado al API key, sin fecha de expiración)
+      - La biblioteca de Coverr es principalmente 16:9 horizontal; el formato 9:16 portrait
+        representa una proporción muy baja (~1%), por lo que esta función no filtra
+        por aspect_ratio — el redimensionado y letterbox se delegan a video.py
+      - El campo duration puede ser número (11.625) o cadena de texto ("10.500000"), ambos son aceptados
 
-    本函数使用 urls.mp4_download 字段作为下载地址 —— 按 Coverr 官方文档
-    (https://api.coverr.co/docs/videos/#download-a-video) 的说法,
-    GET 这个 URL 本身就被 Coverr 当作一次合法的 download 事件计入统计,
-    无需再调用 PATCH /videos/:id/stats/downloads。
+    Esta función usa el campo urls.mp4_download como URL de descarga. Según la documentación
+    oficial de Coverr (https://api.coverr.co/docs/videos/#download-a-video),
+    realizar un GET a esa URL ya cuenta como un evento de descarga válido en sus estadísticas,
+    por lo que no es necesario llamar a PATCH /videos/:id/stats/downloads.
     """
     api_key = get_api_key("coverr_api_keys")
     headers = {"Authorization": f"Bearer {api_key}"}
@@ -216,7 +218,7 @@ def search_videos_coverr(
             return video_items
 
         for v in response["hits"]:
-            # duration 在不同响应里可能是 number(11.625) 或 string("10.500000")
+            # duration puede ser un número (11.625) o una cadena de texto ("10.500000") según la respuesta
             try:
                 duration = int(float(v.get("duration") or 0))
             except (TypeError, ValueError):
@@ -393,13 +395,16 @@ def _download_videos_by_script_order(
     material_directory: str,
 ) -> List[str]:
     """
-    按脚本文案顺序下载素材。
+    Descarga materiales respetando el orden del guion.
 
-    默认下载逻辑会把所有关键词的候选素材合并成一个大列表；如果第一个
-    关键词返回很多结果，最终下载时可能一直消耗这个关键词的素材，后续
-    脚本主题就排不上时间线。这里按关键词分组后轮询下载：
-    第 1 轮取每个关键词的第 1 个候选，第 2 轮取每个关键词的第 2 个候选。
-    这样在不重写视频合成引擎的前提下，尽量保证素材顺序贴近文案顺序。
+    La lógica de descarga predeterminada fusiona todos los candidatos de todas las
+    palabras clave en una única lista; si la primera palabra clave devuelve muchos
+    resultados, la descarga podría consumir únicamente esos materiales, dejando sin
+    representación en la línea de tiempo a los temas posteriores del guion.
+    Para evitarlo, los candidatos se agrupan por palabra clave y se descargan en rondas:
+    la ronda 1 toma el primer candidato de cada keyword, la ronda 2 el segundo, etc.
+    Así, sin reescribir el motor de composición de video, se garantiza en la medida
+    de lo posible que el orden de los materiales se aproxima al orden del guion.
     """
     logger.info("downloading videos with script-order material matching")
     candidate_groups = []
